@@ -12,12 +12,36 @@ from app.models.sport import Sport
 from app.schemas.user import (
     OnboardingRequest,
     UpdateProfileRequest,
+    UserFlatOut,
     UserOut,
     UserSearchResult,
     UserSportOut,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _build_user_flat(user: User) -> UserFlatOut:
+    sports = [
+        UserSportOut(
+            sport_id=us.sport_id,
+            sport_slug=us.sport.slug,
+            sport_name=us.sport.name,
+            level=us.level,
+        )
+        for us in (user.sports or [])
+        if us.sport
+    ]
+    return UserFlatOut(
+        id=str(user.id),
+        email=user.email,
+        phone=user.phone,
+        display_name=user.profile.display_name if user.profile else "",
+        avatar_url=user.profile.avatar_url if user.profile else None,
+        city=user.profile.city if user.profile else None,
+        role=user.role,
+        sports=sports,
+    )
 
 
 def _build_user_out(user: User) -> UserOut:
@@ -41,12 +65,12 @@ def _build_user_out(user: User) -> UserOut:
     )
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=UserFlatOut)
 async def get_me(current_user: User = Depends(get_current_user)):
-    return _build_user_out(current_user)
+    return _build_user_flat(current_user)
 
 
-@router.put("/me", response_model=UserOut)
+@router.put("/me", response_model=UserFlatOut)
 async def update_me(
     body: UpdateProfileRequest,
     db: AsyncSession = Depends(get_db),
@@ -67,7 +91,7 @@ async def update_me(
 
     await db.commit()
     await db.refresh(current_user)
-    return _build_user_out(current_user)
+    return _build_user_flat(current_user)
 
 
 @router.post("/me/onboarding", response_model=UserOut)

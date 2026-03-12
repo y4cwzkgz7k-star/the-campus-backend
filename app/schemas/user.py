@@ -45,6 +45,18 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# Flat representation used by frontend auth context
+class UserFlatOut(BaseModel):
+    id: str
+    email: str
+    phone: str | None
+    display_name: str
+    avatar_url: str | None
+    city: str | None
+    role: str
+    sports: list[UserSportOut]
+
+
 class UpdateProfileRequest(BaseModel):
     display_name: str | None = None
     bio: str | None = None
