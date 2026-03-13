@@ -30,6 +30,17 @@ class Match(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    score_home: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_away: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Hook for AI camera integration (Phase 3).
+    # "manual"     — result submitted by a player (current default, manipulation-prone)
+    # "consensus"  — both players submitted matching scores (Phase 2)
+    # "ai_camera"  — result delivered by court AI system (e.g. SportAI webhook) — fully trusted
+    result_source: Mapped[str] = mapped_column(
+        Enum("manual", "consensus", "ai_camera", name="result_source"),
+        nullable=False,
+        server_default="manual",
+    )
 
     sport: Mapped["Sport"] = relationship()
     booking: Mapped["Booking"] = relationship()

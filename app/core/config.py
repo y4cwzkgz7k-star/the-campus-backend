@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Payment provider placeholder
     PAYMENT_PROVIDER: str = "stripe"
     PAYMENT_SECRET_KEY: str = ""
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
