@@ -38,9 +38,10 @@ class Match(Base):
     # "consensus"  — both players submitted matching scores (Phase 2)
     # "ai_camera"  — result delivered by court AI system (e.g. SportAI webhook) — fully trusted
     result_source: Mapped[str] = mapped_column(
-        Enum("manual", "consensus", "ai_camera", name="result_source"),
+        Enum("manual", "consensus", "ai_camera", name="result_source", create_type=False),
         nullable=False,
-        server_default="manual",
+        default="manual",       # Python-level default (prevents NULL on flush)
+        server_default="manual",  # DB-level default (for raw SQL inserts)
     )
 
     sport: Mapped["Sport"] = relationship()
