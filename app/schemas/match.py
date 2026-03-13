@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class CreateMatchRequest(BaseModel):
     sport_id: uuid.UUID
+    title: str | None = Field(default=None, max_length=150)
     format: str = "doubles"
     max_players: int = 4
     scheduled_at: datetime | None = None
@@ -14,10 +15,11 @@ class CreateMatchRequest(BaseModel):
 
 
 class MatchPlayerOut(BaseModel):
-    user_id: uuid.UUID
+    id: uuid.UUID          # = user_id, named id so frontend can use player.id uniformly
     display_name: str
     avatar_url: str | None
     status: str
+    rating: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -25,9 +27,12 @@ class MatchPlayerOut(BaseModel):
 class MatchOut(BaseModel):
     id: uuid.UUID
     sport_id: uuid.UUID
+    title: str | None = None
     format: str
     status: str
     max_players: int
+    current_players: int = 0
+    created_by: uuid.UUID | None = None
     scheduled_at: datetime | None
     notes: str | None
     city: str | None

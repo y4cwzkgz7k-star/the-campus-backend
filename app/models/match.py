@@ -30,6 +30,7 @@ class Match(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    title: Mapped[str | None] = mapped_column(String(150), nullable=True)
     score_home: Mapped[int | None] = mapped_column(Integer, nullable=True)
     score_away: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Hook for AI camera integration (Phase 3).

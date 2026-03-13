@@ -44,25 +44,30 @@ def _compute_elo(rating_a: float, rating_b: float, score_a: int, score_b: int) -
 def _build_match_out(match: Match) -> MatchOut:
     players = [
         MatchPlayerOut(
-            user_id=mp.user_id,
+            id=mp.user_id,
             display_name=mp.user.profile.display_name if mp.user and mp.user.profile else "",
             avatar_url=mp.user.profile.avatar_url if mp.user and mp.user.profile else None,
             status=mp.status,
+            rating=mp.user.profile.rating if mp.user and mp.user.profile else None,
         )
         for mp in match.players
     ]
     return MatchOut(
         id=match.id,
         sport_id=match.sport_id,
+        title=match.title,
         format=match.format,
         status=match.status,
         max_players=match.max_players,
+        current_players=len(players),
+        created_by=match.created_by,
         scheduled_at=match.scheduled_at,
         notes=match.notes,
         city=match.city,
         created_at=match.created_at,
         score_home=match.score_home,
         score_away=match.score_away,
+        result_source=match.result_source,
         players=players,
     )
 
@@ -103,6 +108,7 @@ async def create_match(
 ):
     match = Match(
         sport_id=body.sport_id,
+        title=body.title,
         booking_id=body.booking_id,
         created_by=current_user.id,
         format=body.format,
