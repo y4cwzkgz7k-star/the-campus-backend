@@ -10,8 +10,6 @@ from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/webhooks/stripe", tags=["webhooks"])
 
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-
 
 @router.post("/")
 async def stripe_webhook(request: Request):
@@ -19,7 +17,9 @@ async def stripe_webhook(request: Request):
     if not stripe_key:
         raise HTTPException(status_code=503, detail="Stripe not configured")
 
-    if not STRIPE_WEBHOOK_SECRET:
+    # Read per-request so the value is picked up after module load (e.g. runtime secrets injection)
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    if not webhook_secret:
         raise HTTPException(status_code=400, detail="Webhook secret not configured")
 
     try:
@@ -32,7 +32,7 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get("stripe-signature", "")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
     except Exception as exc:

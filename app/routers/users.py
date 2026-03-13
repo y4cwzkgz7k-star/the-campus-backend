@@ -178,7 +178,8 @@ async def search_users(
     )
 
     if city:
-        query = query.where(UserProfile.city.ilike(f"%{city}%"))
+        safe_city = city.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(UserProfile.city.ilike(f"%{safe_city}%", escape="\\"))
 
     if sport_slug or level:
         query = query.join(User.sports).join(UserSport.sport)

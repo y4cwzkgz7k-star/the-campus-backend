@@ -1,5 +1,6 @@
 import uuid
-from pydantic import BaseModel
+from typing import Annotated, Literal
+from pydantic import BaseModel, Field
 
 
 class SportLevel(BaseModel):
@@ -8,8 +9,10 @@ class SportLevel(BaseModel):
 
 
 class OnboardingRequest(BaseModel):
-    role: str
-    sports: list[SportLevel]
+    # Restricted to allowed roles — prevents privilege escalation via onboarding
+    role: Literal["player", "trainer"]
+    # Cap sports list to prevent unbounded DB inserts
+    sports: Annotated[list[SportLevel], Field(max_length=20)]
     city: str
     latitude: float | None = None
     longitude: float | None = None
@@ -63,10 +66,11 @@ class UserFlatOut(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    display_name: str | None = None
-    bio: str | None = None
-    city: str | None = None
-    avatar_url: str | None = None
+    display_name: str | None = Field(default=None, max_length=80)
+    bio: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=100)
+    # Only allow https:// URLs to prevent XSS/SSRF via javascript: or data: schemes
+    avatar_url: str | None = Field(default=None, pattern=r'^https?://.+', max_length=500)
 
 
 class UserSearchResult(BaseModel):

@@ -28,7 +28,8 @@ async def list_clubs(
         .order_by(Club.name)
     )
     if city:
-        query = query.where(Club.city.ilike(f"%{city}%"))
+        safe_city = city.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(Club.city.ilike(f"%{safe_city}%", escape="\\"))
 
     result = await db.execute(query)
     return result.scalars().all()

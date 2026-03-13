@@ -188,28 +188,5 @@ async def cancel_booking(
     return booking
 
 
-@router.delete("/{booking_id}", status_code=204)
-async def delete_booking(
-    booking_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    result = await db.execute(
-        select(Booking).where(
-            Booking.id == booking_id,
-            Booking.booked_by == current_user.id,
-        )
-    )
-    booking = result.scalar_one_or_none()
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    if booking.status in ("cancelled", "completed"):
-        raise HTTPException(status_code=400, detail="Cannot cancel this booking")
-
-    booking.status = "cancelled"
-    slot_result = await db.execute(select(CourtSlot).where(CourtSlot.id == booking.slot_id))
-    slot = slot_result.scalar_one_or_none()
-    if slot:
-        slot.status = "available"
-
-    await db.commit()
+# DELETE /bookings/{id} removed — use PATCH /bookings/{id}/cancel instead.
+# The DELETE path bypassed refund logic, reliability score updates, and row locking.
