@@ -2,9 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
+from app.core.limiter import limiter
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -17,7 +15,6 @@ from app.models.user import User, UserProfile
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserInToken
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 def _user_to_token_user(user: User) -> UserInToken:
