@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,https://the-campus-frontend-production.up.railway.app"
 
     # Payment provider placeholder
     PAYMENT_PROVIDER: str = "stripe"
