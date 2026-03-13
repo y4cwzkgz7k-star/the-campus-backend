@@ -30,6 +30,9 @@ class UserProfileOut(BaseModel):
     bio: str | None
     city: str | None
     onboarding_completed: bool
+    reliability_score: float = 100.0
+    total_bookings: int = 0
+    cancelled_bookings: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -47,7 +50,7 @@ class UserOut(BaseModel):
 
 # Flat representation used by frontend auth context
 class UserFlatOut(BaseModel):
-    id: str
+    id: uuid.UUID
     email: str
     phone: str | None
     display_name: str
@@ -55,6 +58,8 @@ class UserFlatOut(BaseModel):
     city: str | None
     role: str
     sports: list[UserSportOut]
+    reliability_score: float = 100.0
+    rating: float = 1200.0
 
 
 class UpdateProfileRequest(BaseModel):
@@ -70,5 +75,6 @@ class UserSearchResult(BaseModel):
     avatar_url: str | None
     city: str | None
     sports: list[UserSportOut]
+    reliability_score: float = 100.0
 
     model_config = {"from_attributes": True}

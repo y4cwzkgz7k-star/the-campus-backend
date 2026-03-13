@@ -33,7 +33,7 @@ def _build_user_flat(user: User) -> UserFlatOut:
         if us.sport
     ]
     return UserFlatOut(
-        id=str(user.id),
+        id=user.id,
         email=user.email,
         phone=user.phone,
         display_name=user.profile.display_name if user.profile else "",
@@ -41,6 +41,8 @@ def _build_user_flat(user: User) -> UserFlatOut:
         city=user.profile.city if user.profile else None,
         role=user.role,
         sports=sports,
+        reliability_score=user.profile.reliability_score if user.profile else 100.0,
+        rating=user.profile.rating if user.profile else 1200.0,
     )
 
 
@@ -153,6 +155,7 @@ async def get_public_profile(user_id: uuid.UUID, db: AsyncSession = Depends(get_
         avatar_url=user.profile.avatar_url if user.profile else None,
         city=user.profile.city if user.profile else None,
         sports=sports,
+        reliability_score=user.profile.reliability_score if user.profile else 100.0,
     )
 
 
@@ -205,5 +208,6 @@ async def search_users(
             avatar_url=u.profile.avatar_url if u.profile else None,
             city=u.profile.city if u.profile else None,
             sports=sports,
+            reliability_score=u.profile.reliability_score if u.profile else 100.0,
         ))
     return out
