@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers import auth, bookings, clubs, matches, sports, users
+from app.routers import matchmaking
 
 app = FastAPI(title="The Campus API", version="0.1.0")
 
@@ -20,6 +21,7 @@ app.include_router(sports.router)
 app.include_router(clubs.router)
 app.include_router(bookings.router)
 app.include_router(matches.router)
+app.include_router(matchmaking.router)
 
 
 @app.get("/health")
