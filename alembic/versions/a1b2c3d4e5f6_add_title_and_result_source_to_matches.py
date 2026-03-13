@@ -17,16 +17,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create enum type first (required before adding the column)
-    result_source_enum = sa.Enum('manual', 'consensus', 'ai_camera', name='result_source')
-    result_source_enum.create(op.get_bind(), checkfirst=True)
-
-    op.add_column('matches', sa.Column(
-        'title', sa.String(150), nullable=True
-    ))
+    op.execute("CREATE TYPE result_source AS ENUM ('manual', 'consensus', 'ai_camera')")
+    op.add_column('matches', sa.Column('title', sa.String(150), nullable=True))
     op.add_column('matches', sa.Column(
         'result_source',
-        result_source_enum,
+        sa.Enum('manual', 'consensus', 'ai_camera', name='result_source', create_type=False),
         server_default='manual',
         nullable=False,
     ))
@@ -35,4 +30,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column('matches', 'result_source')
     op.drop_column('matches', 'title')
-    sa.Enum(name='result_source').drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE result_source")
