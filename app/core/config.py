@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
 
+    @property
+    def cors_allow_credentials(self) -> bool:
+        # CORS spec forbids credentials with wildcard origin.
+        # Automatically disable credentials when wildcard is detected.
+        return "*" not in self.cors_origins_list
+
     class Config:
         env_file = ".env"
 
