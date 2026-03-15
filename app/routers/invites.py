@@ -1,13 +1,13 @@
-import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.limiter import limiter
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.club import Club
@@ -15,26 +15,24 @@ from app.models.club_member import ClubMember
 from app.models.invite_token import InviteToken
 from app.models.user import User
 from app.schemas.invite import (
+    ClaimInviteRequest,
     CreateInviteRequest,
     CreateManagerInviteRequest,
     InviteOut,
     InviteValidationOut,
     InviteWithTokenOut,
 )
+from app.utils.token import hash_token
 
 router = APIRouter(prefix="/invites", tags=["invites"])
 
 _MAX_EXPIRES_HOURS = 24 * 30  # 30 days hard cap
 
 
-def _hash_token(raw: str) -> str:
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 def _generate_raw_token() -> tuple[str, str]:
     """Return (raw_token, token_hash)."""
     raw = secrets.token_urlsafe(32)
-    return raw, _hash_token(raw)
+    return raw, hash_token(raw)
 
 
 def _invite_to_out(invite: InviteToken) -> InviteOut:
@@ -78,8 +76,9 @@ async def _require_club_owner_membership(
         select(ClubMember)
         .where(ClubMember.user_id == user_id, ClubMember.role == "owner")
         .options(selectinload(ClubMember.club))
+        .limit(1)
     )
-    membership = result.scalar_one_or_none()
+    membership = result.scalars().first()
     if not membership:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -89,13 +88,16 @@ async def _require_club_owner_membership(
 
 
 async def _load_invite_by_hash(
-    db: AsyncSession, token_hash: str
+    db: AsyncSession, token_hash: str, for_update: bool = False
 ) -> InviteToken | None:
-    result = await db.execute(
+    q = (
         select(InviteToken)
         .where(InviteToken.token_hash == token_hash)
         .options(selectinload(InviteToken.club))
     )
+    if for_update:
+        q = q.with_for_update()
+    result = await db.execute(q)
     return result.scalar_one_or_none()
 
 
@@ -128,11 +130,13 @@ def _validate_invite_state(invite: InviteToken | None) -> InviteValidationOut:
 
 
 @router.get("/validate", response_model=InviteValidationOut)
+@limiter.limit("30/minute")
 async def validate_invite(
-    token: str = Query(..., min_length=1),
+    request: Request,
+    token: str = Query(..., min_length=1, max_length=200),
     db: AsyncSession = Depends(get_db),
 ) -> InviteValidationOut:
-    token_hash = _hash_token(token)
+    token_hash = hash_token(token)
     invite = await _load_invite_by_hash(db, token_hash)
     return _validate_invite_state(invite)
 
@@ -259,13 +263,17 @@ async def create_manager_invite(
 
 
 @router.post("/claim", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
 async def claim_invite(
-    token: str = Query(..., min_length=1),
+    request: Request,
+    body: ClaimInviteRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    token_hash = _hash_token(token)
-    invite = await _load_invite_by_hash(db, token_hash)
+    token_hash = hash_token(body.token)
+
+    # SELECT FOR UPDATE prevents TOCTOU race: two simultaneous claims of the same token
+    invite = await _load_invite_by_hash(db, token_hash, for_update=True)
 
     validation = _validate_invite_state(invite)
     if not validation.valid:
@@ -287,13 +295,13 @@ async def claim_invite(
         )
 
     # Check for duplicate membership
-    existing_membership = await db.execute(
+    existing_result = await db.execute(
         select(ClubMember).where(
             ClubMember.club_id == invite.club_id,
             ClubMember.user_id == current_user.id,
         )
     )
-    if existing_membership.scalar_one_or_none():
+    if existing_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You are already a member of this club",
@@ -310,9 +318,10 @@ async def claim_invite(
     )
     db.add(membership)
 
-    # Mark invite claimed
+    # Mark invite claimed and deactivate so admin UI shows correct state
     invite.claimed_by_user_id = current_user.id
     invite.claimed_at = datetime.now(timezone.utc)
+    invite.is_active = False
 
     await db.commit()
-    return {"detail": "Invite claimed successfully"}
+    return {"detail": "Invite claimed successfully", "club_id": str(invite.club_id)}

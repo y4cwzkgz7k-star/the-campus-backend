@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.limiter import limiter
+from app.utils.token import hash_token
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -234,7 +234,7 @@ async def register_with_invite(
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     # 1. Look up invite by token hash
-    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+    token_hash = hash_token(body.token)
     invite_result = await db.execute(
         select(InviteToken)
         .where(InviteToken.token_hash == token_hash)
@@ -292,9 +292,10 @@ async def register_with_invite(
             if club is not None:
                 club.owner_user_id = user.id
 
-    # 7. Mark invite claimed
+    # 7. Mark invite claimed and deactivate
     invite.claimed_by_user_id = user.id
     invite.claimed_at = datetime.now(timezone.utc)
+    invite.is_active = False
 
     # 8. Commit atomically
     await db.commit()

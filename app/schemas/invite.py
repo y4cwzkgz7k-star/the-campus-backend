@@ -8,8 +8,8 @@ from pydantic import BaseModel, EmailStr, Field
 class CreateInviteRequest(BaseModel):
     invite_type: Literal["club_owner", "club_manager"]
     club_id: uuid.UUID | None = None
-    email_hint: str | None = None
-    expires_in_hours: int = 72
+    email_hint: EmailStr | None = None
+    expires_in_hours: int = Field(default=72, ge=1, le=720)  # 1 hour – 30 days
 
 
 class InviteOut(BaseModel):
@@ -46,9 +46,13 @@ class RegisterWithInviteRequest(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
 
 
+class ClaimInviteRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
 class CreateManagerInviteRequest(BaseModel):
-    email_hint: str | None = None
-    expires_in_hours: int = 72 * 3  # 1 week default for managers
+    email_hint: EmailStr | None = None
+    expires_in_hours: int = Field(default=168, ge=1, le=720)  # default 1 week, max 30 days
 
 
 class ClubSetupRequest(BaseModel):

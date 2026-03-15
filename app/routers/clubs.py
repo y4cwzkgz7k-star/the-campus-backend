@@ -32,8 +32,9 @@ async def _get_owner_membership(db: AsyncSession, user_id: uuid.UUID) -> ClubMem
         select(ClubMember)
         .where(ClubMember.user_id == user_id, ClubMember.role == "owner")
         .options(selectinload(ClubMember.club))
+        .limit(1)
     )
-    membership = result.scalar_one_or_none()
+    membership = result.scalars().first()
     if not membership:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -48,8 +49,9 @@ async def _get_any_membership(db: AsyncSession, user_id: uuid.UUID) -> ClubMembe
         select(ClubMember)
         .where(ClubMember.user_id == user_id)
         .options(selectinload(ClubMember.club))
+        .limit(1)
     )
-    membership = result.scalar_one_or_none()
+    membership = result.scalars().first()
     if not membership:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
