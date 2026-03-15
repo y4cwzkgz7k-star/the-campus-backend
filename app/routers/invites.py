@@ -282,41 +282,45 @@ async def claim_invite(
             detail=validation.error or "Invalid invite",
         )
 
-    if invite.invite_type != "club_manager":
+    if invite.invite_type not in ("club_owner", "club_manager"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only club_manager invites can be claimed by existing users",
+            detail="Only club_owner or club_manager invites can be claimed by existing users",
         )
 
-    if invite.club_id is None:
+    # For club_manager invites a club must already exist
+    if invite.invite_type == "club_manager" and invite.club_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invite is not linked to a club",
+            detail="Manager invite is not linked to a club",
         )
 
-    # Check for duplicate membership
-    existing_result = await db.execute(
-        select(ClubMember).where(
-            ClubMember.club_id == invite.club_id,
-            ClubMember.user_id == current_user.id,
+    # Check for duplicate membership (only relevant when club_id is set)
+    if invite.club_id is not None:
+        existing_result = await db.execute(
+            select(ClubMember).where(
+                ClubMember.club_id == invite.club_id,
+                ClubMember.user_id == current_user.id,
+            )
         )
-    )
-    if existing_result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You are already a member of this club",
+        if existing_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="You are already a member of this club",
+            )
+
+    # Update user role to match the invite type
+    current_user.role = invite.invite_type  # "club_owner" or "club_manager"
+
+    # Create club membership when a club is already linked
+    if invite.club_id is not None:
+        member_role = "owner" if invite.invite_type == "club_owner" else "manager"
+        membership = ClubMember(
+            club_id=invite.club_id,
+            user_id=current_user.id,
+            role=member_role,
         )
-
-    # Update user role
-    current_user.role = "club_manager"
-
-    # Create club membership
-    membership = ClubMember(
-        club_id=invite.club_id,
-        user_id=current_user.id,
-        role="manager",
-    )
-    db.add(membership)
+        db.add(membership)
 
     # Mark invite claimed and deactivate so admin UI shows correct state
     invite.claimed_by_user_id = current_user.id
@@ -324,4 +328,8 @@ async def claim_invite(
     invite.is_active = False
 
     await db.commit()
-    return {"detail": "Invite claimed successfully", "club_id": str(invite.club_id)}
+    return {
+        "detail": "Invite claimed successfully",
+        "invite_type": invite.invite_type,
+        "club_id": str(invite.club_id) if invite.club_id else None,
+    }
