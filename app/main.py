@@ -5,7 +5,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.limiter import limiter
-from app.routers import auth, bookings, clubs, matches, sports, users
+from app.routers import auth, bookings, clubs, invites, matches, sports, users
 from app.routers import matchmaking
 from app.routers import webhooks_stripe
 
@@ -36,6 +36,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(sports.router)
 app.include_router(clubs.router)
+app.include_router(invites.router)
 app.include_router(bookings.router)
 app.include_router(matches.router)
 app.include_router(matchmaking.router)
