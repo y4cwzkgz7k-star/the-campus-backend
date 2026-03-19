@@ -2,6 +2,7 @@ import re
 import uuid
 from datetime import date
 
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -295,9 +296,45 @@ async def list_my_club_members(
 # ---------------------------------------------------------------------------
 
 
+@router.post("/", response_model=ClubOut, status_code=201)
+async def create_club_admin(
+    body: ClubSetupRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ClubOut:
+    """Admin creates a club shell. Owner is assigned later via invite."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    slug = _make_unique_slug(body.name)
+    club = Club(
+        name=body.name,
+        slug=slug,
+        address=body.address,
+        city=body.city,
+        phone=body.phone,
+        description=body.description,
+        is_verified=True,
+    )
+    db.add(club)
+    await db.flush()
+    await db.commit()
+    await db.refresh(club)
+    return club
+
+
+def _make_unique_slug(name: str) -> str:
+    base = _slugify(name)
+    # Append a short random suffix to avoid collisions
+    import secrets as _secrets
+    return f"{base}-{_secrets.token_hex(3)}"
+
+
 @router.get("/", response_model=list[ClubOut])
 async def list_clubs(
     city: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ):
     query = (
@@ -310,7 +347,7 @@ async def list_clubs(
         safe_city = city.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.where(Club.city.ilike(f"%{safe_city}%", escape="\\"))
 
-    result = await db.execute(query)
+    result = await db.execute(query.offset(skip).limit(limit))
     return result.scalars().all()
 
 

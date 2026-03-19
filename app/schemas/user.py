@@ -69,8 +69,8 @@ class UpdateProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, max_length=80)
     bio: str | None = Field(default=None, max_length=500)
     city: str | None = Field(default=None, max_length=100)
-    # Only allow https:// URLs to prevent XSS/SSRF via javascript: or data: schemes
-    avatar_url: str | None = Field(default=None, pattern=r'^https?://.+', max_length=500)
+    # Only allow https:// URLs to prevent XSS/SSRF via javascript:, data:, or http: schemes
+    avatar_url: str | None = Field(default=None, pattern=r'^https://.+', max_length=500)
 
 
 class UserSearchResult(BaseModel):

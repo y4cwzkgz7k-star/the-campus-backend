@@ -13,7 +13,7 @@ class Court(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     club_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("clubs.id", ondelete="CASCADE"), nullable=False, index=True)
-    sport_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sports.id"), nullable=False)
+    sport_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sports.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     surface: Mapped[str | None] = mapped_column(
         Enum("synthetic", "hard", "clay", "grass", "parquet", name="court_surface"),

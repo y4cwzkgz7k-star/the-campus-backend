@@ -14,10 +14,10 @@ class ClubMember(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     club_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("clubs.id"), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     role: Mapped[str] = mapped_column(
         Enum("owner", "manager", name="club_member_role_enum"),

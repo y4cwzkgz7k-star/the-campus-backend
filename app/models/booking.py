@@ -12,7 +12,7 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    slot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("court_slots.id"), nullable=False)
+    slot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("court_slots.id"), nullable=False, index=True)
     booked_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(
         Enum("pending", "confirmed", "cancelled", "completed", "no_show", name="booking_status"),

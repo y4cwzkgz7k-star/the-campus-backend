@@ -4,9 +4,12 @@ Stripe webhook handler.
 Receives events from Stripe and updates booking payment_status accordingly.
 Requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET in environment.
 """
+import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Request
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks/stripe", tags=["webhooks"])
 
@@ -37,7 +40,8 @@ async def stripe_webhook(request: Request):
     except stripe.errors.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Webhook parse error: {exc}")
+        logger.error("Webhook parse error: %s", exc)
+        raise HTTPException(status_code=400, detail="Webhook parse error")
 
     event_type: str = event.get("type", "")
 
