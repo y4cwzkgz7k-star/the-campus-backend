@@ -62,7 +62,7 @@ class MatchPlayer(Base):
     __tablename__ = "match_players"
 
     match_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("matches.id", ondelete="CASCADE"), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
     status: Mapped[str] = mapped_column(
         Enum("invited", "confirmed", "declined", name="player_status"),
         default="confirmed",

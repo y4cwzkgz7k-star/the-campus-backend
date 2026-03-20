@@ -21,8 +21,8 @@ from app.schemas.user import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def _build_user_flat(user: User) -> UserFlatOut:
-    sports = [
+def _build_sports_list(user: User) -> list[UserSportOut]:
+    return [
         UserSportOut(
             sport_id=us.sport_id,
             sport_slug=us.sport.slug,
@@ -32,6 +32,9 @@ def _build_user_flat(user: User) -> UserFlatOut:
         for us in (user.sports or [])
         if us.sport
     ]
+
+
+def _build_user_flat(user: User) -> UserFlatOut:
     return UserFlatOut(
         id=user.id,
         email=user.email,
@@ -40,30 +43,20 @@ def _build_user_flat(user: User) -> UserFlatOut:
         avatar_url=user.profile.avatar_url if user.profile else None,
         city=user.profile.city if user.profile else None,
         role=user.role,
-        sports=sports,
+        sports=_build_sports_list(user),
         reliability_score=user.profile.reliability_score if user.profile else 100.0,
         rating=user.profile.rating if user.profile else 1200.0,
     )
 
 
 def _build_user_out(user: User) -> UserOut:
-    sports = [
-        UserSportOut(
-            sport_id=us.sport_id,
-            sport_slug=us.sport.slug,
-            sport_name=us.sport.name,
-            level=us.level,
-        )
-        for us in (user.sports or [])
-        if us.sport
-    ]
     return UserOut(
         id=user.id,
         email=user.email,
         role=user.role,
         is_verified=user.is_verified,
         profile=user.profile,
-        sports=sports,
+        sports=_build_sports_list(user),
     )
 
 
@@ -139,22 +132,12 @@ async def get_public_profile(user_id: uuid.UUID, db: AsyncSession = Depends(get_
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    sports = [
-        UserSportOut(
-            sport_id=us.sport_id,
-            sport_slug=us.sport.slug,
-            sport_name=us.sport.name,
-            level=us.level,
-        )
-        for us in user.sports
-        if us.sport
-    ]
     return UserSearchResult(
         id=user.id,
         display_name=user.profile.display_name if user.profile else "",
         avatar_url=user.profile.avatar_url if user.profile else None,
         city=user.profile.city if user.profile else None,
-        sports=sports,
+        sports=_build_sports_list(user),
         reliability_score=user.profile.reliability_score if user.profile else 100.0,
     )
 
@@ -191,24 +174,14 @@ async def search_users(
     result = await db.execute(query.limit(50))
     users = result.scalars().unique().all()
 
-    out = []
-    for u in users:
-        sports = [
-            UserSportOut(
-                sport_id=us.sport_id,
-                sport_slug=us.sport.slug,
-                sport_name=us.sport.name,
-                level=us.level,
-            )
-            for us in u.sports
-            if us.sport
-        ]
-        out.append(UserSearchResult(
+    return [
+        UserSearchResult(
             id=u.id,
             display_name=u.profile.display_name if u.profile else "",
             avatar_url=u.profile.avatar_url if u.profile else None,
             city=u.profile.city if u.profile else None,
-            sports=sports,
+            sports=_build_sports_list(u),
             reliability_score=u.profile.reliability_score if u.profile else 100.0,
-        ))
-    return out
+        )
+        for u in users
+    ]

@@ -30,7 +30,11 @@ class Booking(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    refund_status: Mapped[str] = mapped_column(String(20), default="none", nullable=False)
+    refund_status: Mapped[str] = mapped_column(
+        Enum("none", "pending", "completed", name="refund_status"),
+        default="none",
+        nullable=False,
+    )
 
     slot: Mapped["CourtSlot"] = relationship()
     user: Mapped["User"] = relationship()
