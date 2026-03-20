@@ -9,6 +9,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.match import Match, MatchPlayer
 from app.models.user import User, UserProfile
+from app.constants import MatchStatus, PlayerStatus, ResultConfirmation, ResultSource
 from app.schemas.match import (
     CreateMatchRequest,
     MatchOut,
@@ -77,7 +78,7 @@ def _build_match_out(match: Match) -> MatchOut:
 async def list_matches(
     sport_id: uuid.UUID | None = None,
     city: str | None = None,
-    status: str = "open",
+    status: str = MatchStatus.OPEN,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -121,7 +122,7 @@ async def create_match(
     db.add(match)
     await db.flush()
 
-    db.add(MatchPlayer(match_id=match.id, user_id=current_user.id, status="confirmed"))
+    db.add(MatchPlayer(match_id=match.id, user_id=current_user.id, status=PlayerStatus.CONFIRMED))
     await db.commit()
 
     result = await db.execute(
@@ -151,10 +152,10 @@ async def join_match(
     match = result.scalar_one_or_none()
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
-    if match.status != "open":
+    if match.status != MatchStatus.OPEN:
         raise HTTPException(status_code=409, detail="Match is not open")
 
-    confirmed = [p for p in match.players if p.status == "confirmed"]
+    confirmed = [p for p in match.players if p.status == PlayerStatus.CONFIRMED]
     if len(confirmed) >= match.max_players:
         raise HTTPException(status_code=409, detail="Match is full")
 
@@ -162,10 +163,10 @@ async def join_match(
     if already:
         raise HTTPException(status_code=400, detail="Already joined")
 
-    db.add(MatchPlayer(match_id=match.id, user_id=current_user.id, status="confirmed"))
+    db.add(MatchPlayer(match_id=match.id, user_id=current_user.id, status=PlayerStatus.CONFIRMED))
 
     if len(confirmed) + 1 >= match.max_players:
-        match.status = "full"
+        match.status = MatchStatus.FULL
 
     await db.commit()
 
@@ -197,8 +198,8 @@ async def leave_match(
 
     match_result = await db.execute(select(Match).where(Match.id == match_id).with_for_update())
     match = match_result.scalar_one_or_none()
-    if match and match.status == "full":
-        match.status = "open"
+    if match and match.status == MatchStatus.FULL:
+        match.status = MatchStatus.OPEN
 
     await db.commit()
 
@@ -232,20 +233,20 @@ async def submit_result(
         raise HTTPException(status_code=404, detail="Match not found")
 
     # --- Guard: only confirmed participants ---
-    participant_ids = {mp.user_id for mp in match.players if mp.status == "confirmed"}
+    participant_ids = {mp.user_id for mp in match.players if mp.status == PlayerStatus.CONFIRMED}
     if current_user.id not in participant_ids:
         raise HTTPException(status_code=403, detail="Only match participants can submit results")
 
-    if match.status == "completed":
+    if match.status == MatchStatus.COMPLETED:
         raise HTTPException(status_code=409, detail="Result already submitted for this match")
 
-    if match.status == "disputed":
+    if match.status == MatchStatus.DISPUTED:
         raise HTTPException(status_code=409, detail="Match result is disputed — contact support to resolve")
 
-    if match.status not in ("open", "full", "in_progress"):
+    if match.status not in (MatchStatus.OPEN, MatchStatus.FULL, MatchStatus.IN_PROGRESS):
         raise HTTPException(status_code=409, detail=f"Cannot submit result for match with status '{match.status}'")
 
-    confirmed_players = [mp for mp in match.players if mp.status == "confirmed"]
+    confirmed_players = [mp for mp in match.players if mp.status == PlayerStatus.CONFIRMED]
     if len(confirmed_players) < 2:
         raise HTTPException(status_code=400, detail="Match needs at least 2 confirmed players to submit result")
 
@@ -258,7 +259,7 @@ async def submit_result(
 
         refreshed = await _refetch_match(db, match_id)
         return SubmitResultResponse(
-            status="pending",
+            status=ResultConfirmation.PENDING,
             message="Score recorded. Waiting for opponent to confirm.",
             match=_build_match_out(refreshed),
         )
@@ -278,12 +279,12 @@ async def submit_result(
 
     if not scores_match:
         # Dispute: scores disagree — do NOT update ELO
-        match.status = "disputed"
+        match.status = MatchStatus.DISPUTED
         await db.commit()
 
         refreshed = await _refetch_match(db, match_id)
         return SubmitResultResponse(
-            status="disputed",
+            status=ResultConfirmation.DISPUTED,
             message=(
                 f"Score mismatch. You submitted {body.score_home}-{body.score_away}, "
                 f"but opponent submitted {match.submitted_score_home}-{match.submitted_score_away}. "
@@ -317,8 +318,8 @@ async def submit_result(
 
     match.score_home = body.score_home
     match.score_away = body.score_away
-    match.status = "completed"
-    match.result_source = "consensus"
+    match.status = MatchStatus.COMPLETED
+    match.result_source = ResultSource.CONSENSUS
 
     home_profile.rating = new_rating_a
     away_profile.rating = new_rating_b
@@ -327,7 +328,7 @@ async def submit_result(
 
     refreshed = await _refetch_match(db, match_id)
     return SubmitResultResponse(
-        status="confirmed",
+        status=ResultConfirmation.CONFIRMED,
         message="Both players agreed on the score. ELO ratings updated.",
         match=_build_match_out(refreshed),
         player_a=PlayerEloOut(user_id=home_mp.user_id, new_rating=new_rating_a),

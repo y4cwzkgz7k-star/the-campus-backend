@@ -9,6 +9,8 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.constants import PaymentStatus, RefundStatus
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks/stripe", tags=["webhooks"])
@@ -59,8 +61,8 @@ async def stripe_webhook(request: Request):
                 select(Booking).where(Booking.payment_provider_id == provider_id)
             )
             booking = result.scalar_one_or_none()
-            if booking and booking.payment_status != "paid":
-                booking.payment_status = "paid"
+            if booking and booking.payment_status != PaymentStatus.PAID:
+                booking.payment_status = PaymentStatus.PAID
                 await db.commit()
 
     elif event_type == "payment_intent.payment_failed":
@@ -72,8 +74,8 @@ async def stripe_webhook(request: Request):
                 select(Booking).where(Booking.payment_provider_id == provider_id)
             )
             booking = result.scalar_one_or_none()
-            if booking and booking.payment_status not in ("paid", "failed"):
-                booking.payment_status = "failed"
+            if booking and booking.payment_status not in (PaymentStatus.PAID, PaymentStatus.FAILED):
+                booking.payment_status = PaymentStatus.FAILED
                 await db.commit()
 
     elif event_type == "charge.refunded":
@@ -86,8 +88,8 @@ async def stripe_webhook(request: Request):
                 )
                 booking = result.scalar_one_or_none()
                 if booking:
-                    booking.payment_status = "refunded"
-                    booking.refund_status = "completed"
+                    booking.payment_status = PaymentStatus.REFUNDED
+                    booking.refund_status = RefundStatus.COMPLETED
                     await db.commit()
 
     # Return 200 for all other events to acknowledge receipt

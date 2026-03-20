@@ -12,6 +12,7 @@ from app.deps import get_current_user
 from app.models.booking import Booking
 from app.models.court import CourtSlot
 from app.models.user import User, UserProfile
+from app.constants import BookingStatus, PaymentStatus, RefundStatus, SlotStatus
 from app.schemas.booking import BookingOut, CancelBookingRequest, CreateBookingRequest
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -41,10 +42,10 @@ async def create_booking(
     slot = result.scalar_one_or_none()
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
-    if slot.status != "available":
+    if slot.status != SlotStatus.AVAILABLE:
         raise HTTPException(status_code=409, detail="Slot is no longer available")
 
-    slot.status = "booked"
+    slot.status = SlotStatus.BOOKED
 
     booking = Booking(
         slot_id=slot.id,
@@ -145,7 +146,7 @@ async def cancel_booking(
     if booking.booked_by != current_user.id:
         raise HTTPException(status_code=403, detail="Only the booking owner can cancel")
 
-    if booking.status in ("cancelled", "completed"):
+    if booking.status in (BookingStatus.CANCELLED, BookingStatus.COMPLETED):
         raise HTTPException(status_code=409, detail=f"Cannot cancel a booking with status '{booking.status}'")
 
     # Load slot to determine time until start and to free it
@@ -157,13 +158,13 @@ async def cancel_booking(
     slot = slot_result.scalar_one_or_none()
 
     now_utc = datetime.now(timezone.utc)
-    refund_status = "none"
+    refund_status = RefundStatus.NONE
 
     if slot is not None:
         slot_start = _slot_start_utc(slot)
         hours_until_start = (slot_start - now_utc).total_seconds() / 3600.0
-        refund_status = "pending" if hours_until_start >= REFUND_CUTOFF_HOURS else "none"
-        slot.status = "available"
+        refund_status = RefundStatus.PENDING if hours_until_start >= REFUND_CUTOFF_HOURS else RefundStatus.NONE
+        slot.status = SlotStatus.AVAILABLE
 
     # Load profile with lock to update reliability score
     profile_result = await db.execute(
@@ -180,7 +181,7 @@ async def cancel_booking(
         profile.reliability_score = round(new_reliability, 2)
 
     # Update booking fields
-    booking.status = "cancelled"
+    booking.status = BookingStatus.CANCELLED
     booking.cancelled_at = now_utc
     booking.cancellation_reason = body.reason
     booking.refund_status = refund_status

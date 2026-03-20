@@ -1,8 +1,16 @@
 """
 WebSocket-based matchmaking router.
 
-Clients connect to /ws/matchmaking/{user_id}?token=<access_token>
-and exchange JSON messages:
+Clients connect to /ws/matchmaking/{user_id} and authenticate by
+sending an auth message as the very first message:
+
+  {"type": "auth", "token": "<access_token>"}
+
+After successful auth the server replies:
+
+  {"type": "auth_success"}
+
+Then the normal message exchange begins:
 
   Client → Server:
     {"type": "join",  "payload": {"city": "...", "format": "...", "elo_min": N, "elo_max": N}}
@@ -22,7 +30,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,27 +101,89 @@ async def _try_match() -> None:
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
 
-@router.websocket("/ws/matchmaking/{user_id}")
-async def matchmaking_ws(
+AUTH_TIMEOUT_SECONDS = 10
+
+
+async def _authenticate(
     websocket: WebSocket,
     user_id: str,
-    token: str = Query(...),
-):
+) -> bool:
+    """Wait for the first message to be an auth message and validate it.
+
+    Returns True on success, False on failure (connection is closed on failure).
+    """
+    try:
+        raw = await asyncio.wait_for(
+            websocket.receive_text(),
+            timeout=AUTH_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        await _send(websocket, {
+            "type": "error",
+            "payload": {"detail": "auth timeout — no auth message received"},
+        })
+        await websocket.close(code=4000)
+        return False
+    except WebSocketDisconnect:
+        return False
+
+    # Parse auth message
+    try:
+        msg = json.loads(raw)
+    except json.JSONDecodeError:
+        await _send(websocket, {
+            "type": "error",
+            "payload": {"detail": "invalid JSON in auth message"},
+        })
+        await websocket.close(code=4000)
+        return False
+
+    if msg.get("type") != "auth" or not isinstance(msg.get("token"), str):
+        await _send(websocket, {
+            "type": "error",
+            "payload": {"detail": "first message must be {\"type\": \"auth\", \"token\": \"...\"}"},
+        })
+        await websocket.close(code=4000)
+        return False
+
+    token = msg["token"]
+
     # Verify JWT
     payload = decode_token(token)
     if not payload or payload.get("type") != "access" or str(payload.get("sub")) != user_id:
+        await _send(websocket, {
+            "type": "error",
+            "payload": {"detail": "invalid or mismatched token"},
+        })
         await websocket.close(code=4001)
-        return
+        return False
 
     # Verify user exists
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user or not user.is_active:
+            await _send(websocket, {
+                "type": "error",
+                "payload": {"detail": "user not found or inactive"},
+            })
             await websocket.close(code=4003)
-            return
+            return False
 
+    await _send(websocket, {"type": "auth_success"})
+    return True
+
+
+@router.websocket("/ws/matchmaking/{user_id}")
+async def matchmaking_ws(
+    websocket: WebSocket,
+    user_id: str,
+):
     await websocket.accept()
+
+    # Wait for auth message as the first message
+    if not await _authenticate(websocket, user_id):
+        return
 
     try:
         while True:

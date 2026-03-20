@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Float, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,8 +25,8 @@ class User(Base):
     email_verification_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     password_reset_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc))
 
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
     sports: Mapped[list["UserSport"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -43,8 +43,8 @@ class UserProfile(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    rating: Mapped[float] = mapped_column(Float, default=1200.0)
-    reliability_score: Mapped[float] = mapped_column(Float, default=100.0)
+    rating: Mapped[float] = mapped_column(Numeric(10, 2), default=1200.0, server_default="1200.00")
+    reliability_score: Mapped[float] = mapped_column(Numeric(10, 2), default=100.0, server_default="100.00")
     total_bookings: Mapped[int] = mapped_column(Integer, default=0)
     cancelled_bookings: Mapped[int] = mapped_column(Integer, default=0)
 

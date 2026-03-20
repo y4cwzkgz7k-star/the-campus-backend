@@ -15,6 +15,7 @@ from app.models.club import Club
 from app.models.club_member import ClubMember
 from app.models.court import Court, CourtSlot
 from app.models.user import User
+from app.constants import SlotStatus
 from app.schemas.club import ClubOut, CourtOut, SlotOut
 from app.schemas.invite import AddCourtRequest, ClubSetupRequest, MyClubOut
 
@@ -382,7 +383,7 @@ async def get_club_slots(
         .join(CourtSlot.court)
         .where(
             Court.club_id == club.id,
-            CourtSlot.status == "available",
+            CourtSlot.status == SlotStatus.AVAILABLE,
         )
         .options(selectinload(CourtSlot.court))
     )
