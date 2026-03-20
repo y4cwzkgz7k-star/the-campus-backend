@@ -61,3 +61,19 @@ class MatchResultOut(BaseModel):
     match: MatchOut
     player_a: PlayerEloOut
     player_b: PlayerEloOut
+
+
+class SubmitResultResponse(BaseModel):
+    """Unified response for the two-confirmation result flow.
+
+    Possible statuses:
+      - "pending"   : first submission recorded, waiting for opponent
+      - "confirmed" : both players agreed, ELO updated
+      - "disputed"  : scores do not match, needs resolution
+    """
+    status: str
+    message: str
+    match: MatchOut
+    # Only present when status == "confirmed"
+    player_a: PlayerEloOut | None = None
+    player_b: PlayerEloOut | None = None

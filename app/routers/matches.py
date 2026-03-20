@@ -16,6 +16,7 @@ from app.schemas.match import (
     MatchResultOut,
     MatchResultRequest,
     PlayerEloOut,
+    SubmitResultResponse,
 )
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -202,14 +203,20 @@ async def leave_match(
     await db.commit()
 
 
-@router.post("/{match_id}/result", response_model=MatchResultOut)
+@router.post("/{match_id}/result", response_model=SubmitResultResponse)
 async def submit_result(
     match_id: uuid.UUID,
     body: MatchResultRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Load match with players
+    """Two-confirmation result flow.
+
+    First submission:  stores pending scores, returns status="pending".
+    Second submission: if scores match  -> finalises match + updates ELO, status="confirmed".
+                       if scores differ -> marks match as disputed, status="disputed".
+    """
+    # Load match with players (row-level lock prevents race conditions)
     match_result = await db.execute(
         select(Match)
         .where(Match.id == match_id)
@@ -224,7 +231,7 @@ async def submit_result(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
 
-    # Verify current user is a confirmed participant
+    # --- Guard: only confirmed participants ---
     participant_ids = {mp.user_id for mp in match.players if mp.status == "confirmed"}
     if current_user.id not in participant_ids:
         raise HTTPException(status_code=403, detail="Only match participants can submit results")
@@ -232,21 +239,65 @@ async def submit_result(
     if match.status == "completed":
         raise HTTPException(status_code=409, detail="Result already submitted for this match")
 
+    if match.status == "disputed":
+        raise HTTPException(status_code=409, detail="Match result is disputed — contact support to resolve")
+
     if match.status not in ("open", "full", "in_progress"):
         raise HTTPException(status_code=409, detail=f"Cannot submit result for match with status '{match.status}'")
 
-    # For ELO we need exactly 2 players (singles) or treat first two as representatives
     confirmed_players = [mp for mp in match.players if mp.status == "confirmed"]
     if len(confirmed_players) < 2:
         raise HTTPException(status_code=400, detail="Match needs at least 2 confirmed players to submit result")
 
-    # player_a = creator (home), player_b = first other confirmed player (away)
+    # --- First submission (no pending result yet) ---
+    if match.result_submitted_by is None:
+        match.result_submitted_by = current_user.id
+        match.submitted_score_home = body.score_home
+        match.submitted_score_away = body.score_away
+        await db.commit()
+
+        refreshed = await _refetch_match(db, match_id)
+        return SubmitResultResponse(
+            status="pending",
+            message="Score recorded. Waiting for opponent to confirm.",
+            match=_build_match_out(refreshed),
+        )
+
+    # --- Prevent the same player from confirming their own submission ---
+    if match.result_submitted_by == current_user.id:
+        raise HTTPException(
+            status_code=409,
+            detail="You already submitted a result. Waiting for your opponent to confirm.",
+        )
+
+    # --- Second submission: compare scores ---
+    scores_match = (
+        body.score_home == match.submitted_score_home
+        and body.score_away == match.submitted_score_away
+    )
+
+    if not scores_match:
+        # Dispute: scores disagree — do NOT update ELO
+        match.status = "disputed"
+        await db.commit()
+
+        refreshed = await _refetch_match(db, match_id)
+        return SubmitResultResponse(
+            status="disputed",
+            message=(
+                f"Score mismatch. You submitted {body.score_home}-{body.score_away}, "
+                f"but opponent submitted {match.submitted_score_home}-{match.submitted_score_away}. "
+                "Match marked as disputed."
+            ),
+            match=_build_match_out(refreshed),
+        )
+
+    # --- Consensus reached: finalise match and update ELO ---
     home_mp = next((mp for mp in confirmed_players if mp.user_id == match.created_by), confirmed_players[0])
     away_mp = next((mp for mp in confirmed_players if mp.user_id != home_mp.user_id), None)
     if away_mp is None:
         raise HTTPException(status_code=400, detail="Cannot determine two distinct players for ELO calculation")
 
-    # Load profiles with for_update to update ratings
     home_profile_result = await db.execute(
         select(UserProfile).where(UserProfile.user_id == home_mp.user_id).with_for_update()
     )
@@ -262,22 +313,31 @@ async def submit_result(
 
     rating_a = home_profile.rating if home_profile.rating is not None else ELO_DEFAULT_RATING
     rating_b = away_profile.rating if away_profile.rating is not None else ELO_DEFAULT_RATING
-
     new_rating_a, new_rating_b = _compute_elo(rating_a, rating_b, body.score_home, body.score_away)
 
-    # Update match — create new state without mutating nested objects
     match.score_home = body.score_home
     match.score_away = body.score_away
     match.status = "completed"
+    match.result_source = "consensus"
 
-    # Update ELO ratings
     home_profile.rating = new_rating_a
     away_profile.rating = new_rating_b
 
     await db.commit()
 
-    # Re-fetch match for clean response
-    refreshed_result = await db.execute(
+    refreshed = await _refetch_match(db, match_id)
+    return SubmitResultResponse(
+        status="confirmed",
+        message="Both players agreed on the score. ELO ratings updated.",
+        match=_build_match_out(refreshed),
+        player_a=PlayerEloOut(user_id=home_mp.user_id, new_rating=new_rating_a),
+        player_b=PlayerEloOut(user_id=away_mp.user_id, new_rating=new_rating_b),
+    )
+
+
+async def _refetch_match(db: AsyncSession, match_id: uuid.UUID) -> Match:
+    """Re-fetch a match with all eager-loaded relationships for a clean response."""
+    result = await db.execute(
         select(Match)
         .where(Match.id == match_id)
         .options(
@@ -286,10 +346,4 @@ async def submit_result(
             .selectinload(User.profile)
         )
     )
-    refreshed_match = refreshed_result.scalar_one()
-
-    return MatchResultOut(
-        match=_build_match_out(refreshed_match),
-        player_a=PlayerEloOut(user_id=home_mp.user_id, new_rating=new_rating_a),
-        player_b=PlayerEloOut(user_id=away_mp.user_id, new_rating=new_rating_b),
-    )
+    return result.scalar_one()

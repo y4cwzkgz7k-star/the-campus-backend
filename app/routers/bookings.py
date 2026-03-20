@@ -62,20 +62,17 @@ async def create_booking(
     if profile is not None:
         profile.total_bookings = profile.total_bookings + 1
 
-    await db.commit()
-    await db.refresh(booking)
-
-    # Stripe integration — graceful, only if configured
+    # Stripe integration — call BEFORE commit to ensure atomicity.
+    # If Stripe fails, we roll back everything (slot stays available, no orphaned booking).
     client_secret: str | None = None
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if stripe_key:
-        try:
-            import stripe  # type: ignore
-            client = stripe.StripeClient(stripe_key)
+        import stripe  # type: ignore
 
-            # Determine amount: use slot price_override if set, else 0
-            amount_cents = int((float(slot.price_override or 0)) * 100)
-            if amount_cents > 0:
+        amount_cents = int((float(slot.price_override or 0)) * 100)
+        if amount_cents > 0:
+            try:
+                client = stripe.StripeClient(stripe_key)
                 intent = client.payment_intents.create(
                     params={
                         "amount": amount_cents,
@@ -84,14 +81,19 @@ async def create_booking(
                     }
                 )
                 client_secret = intent.client_secret
-
-                # Store the payment intent id
                 booking.payment_provider_id = intent.id
-                await db.commit()
-                await db.refresh(booking)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("Stripe PaymentIntent failed: %s", e)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Stripe PaymentIntent failed: %s", e)
+                await db.rollback()
+                raise HTTPException(
+                    status_code=502,
+                    detail="Payment provider error — please try again",
+                )
+
+    # Single atomic commit: booking + slot status + payment_provider_id
+    await db.commit()
+    await db.refresh(booking)
 
     # Build response manually to inject client_secret (not a DB column)
     return BookingOut(

@@ -21,7 +21,7 @@ class Match(Base):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum("open", "full", "in_progress", "completed", "cancelled", name="match_status"),
+        Enum("open", "full", "in_progress", "completed", "cancelled", "disputed", name="match_status"),
         default="open",
         nullable=False,
     )
@@ -43,6 +43,15 @@ class Match(Base):
         default="manual",       # Python-level default (prevents NULL on flush)
         server_default="manual",  # DB-level default (for raw SQL inserts)
     )
+
+    # --- Two-confirmation result consensus fields (Phase 2) ---
+    # Tracks the first player who submitted a pending result.
+    # NULL means no pending result yet.
+    result_submitted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    submitted_score_home: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    submitted_score_away: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     sport: Mapped["Sport"] = relationship()
     booking: Mapped["Booking"] = relationship()
