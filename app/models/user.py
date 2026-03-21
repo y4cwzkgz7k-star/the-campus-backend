@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Float, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,8 +43,8 @@ class UserProfile(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    rating: Mapped[float] = mapped_column(Numeric(10, 2), default=1200.0, server_default="1200.00")
-    reliability_score: Mapped[float] = mapped_column(Numeric(10, 2), default=100.0, server_default="100.00")
+    rating: Mapped[float] = mapped_column(Float, default=1200.0, server_default="1200.00")
+    reliability_score: Mapped[float] = mapped_column(Float, default=100.0, server_default="100.00")
     total_bookings: Mapped[int] = mapped_column(Integer, default=0)
     cancelled_bookings: Mapped[int] = mapped_column(Integer, default=0)
 
